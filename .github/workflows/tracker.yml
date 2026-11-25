@@ -1,0 +1,199 @@
+name: Blue tracker WoW
+
+# Déclencheurs volontairement limités : planification et lancement manuel.
+# Aucun déclencheur pull_request ou pull_request_target : une PR venant d'un fork
+# ne peut jamais lancer ce workflow ni lire ses secrets.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Aperçu seulement (rien n'est publié ni enregistré)"
+        type: boolean
+        default: false
+
+# Par défaut, le jeton GitHub n'a aucun droit.
+permissions: {}
+
+# Un seul passage à la fois, pour ne jamais publier deux fois le même post.
+concurrency:
+  group: blue-tracker
+  cancel-in-progress: false
+
+jobs:
+  # Job 1 : lit les posts, appelle Claude, publie sur Discord.
+  # Il a le secret Discord et l'accès à Claude, mais aucun droit d'écriture sur le dépôt.
+  track:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      # Jeton d'identité GitHub, échangé contre un accès Claude de courte durée (fédération).
+      # Seul ce job le reçoit.
+      id-token: write
+    outputs:
+      # « true » dès que le tracker a démarré : il y a alors un état à enregistrer.
+      ran: ${{ steps.started.outputs.ran }}
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Dernier état de la branche, même si ce passage a attendu le précédent.
+          ref: ${{ github.ref_name }}
+          persist-credentials: false
+
+      - name: Installer Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+
+      - name: Installer les dépendances (versions et empreintes figées)
+        run: python -m pip install --disable-pip-version-check --require-hashes --no-deps -r requirements.txt
+
+      - name: Marquer le démarrage
+        id: started
+        run: echo "ran=true" >> "$GITHUB_OUTPUT"
+
+      - name: Lancer le tracker
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          # Fédération d'identité (recommandé) : ces identifiants ne sont pas secrets.
+          ANTHROPIC_FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+          ANTHROPIC_ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+          ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+          ANTHROPIC_WORKSPACE_ID: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
+          TRACKER_SCOPE: ${{ vars.TRACKER_SCOPE }}
+          DRY_RUN: ${{ inputs.dry_run && 'true' || 'false' }}
+          PREVIEW_COUNT: "3"
+        run: python -m tracker.main
+
+      # Transmis même en cas d'erreur : les posts déjà publiés ne doivent pas repartir.
+      - name: Transmettre l'état
+        if: ${{ always() && !inputs.dry_run }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tracker-state
+          path: state/seen.json
+          if-no-files-found: ignore
+          retention-days: 1
+
+  # Job 2 : enregistre l'état dans le dépôt.
+  # Il a le droit d'écrire, mais aucun secret et n'exécute pas le code du tracker.
+  save-state:
+    needs: track
+    # Aussi après une annulation : les posts déjà publiés doivent être enregistrés.
+    if: ${{ always() && !inputs.dry_run && (needs.track.outputs.ran == 'true' || needs.track.result == 'cancelled') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      actions: write # seulement pour désactiver le workflow si l'état ne peut pas être enregistré
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Récupérer l'état
+        id: state
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: tracker-state
+          path: incoming
+
+      # Second essai si le premier téléchargement a échoué (coupure réseau passagère).
+      - name: Récupérer l'état (second essai)
+        id: state_retry
+        if: ${{ steps.state.outcome != 'success' }}
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: tracker-state
+          path: incoming
+
+      # Un passage annulé avant le démarrage du tracker n'a pas d'état : ce n'est pas une erreur.
+      - name: Vérifier que l'état est arrivé
+        if: ${{ steps.state.outcome != 'success' && steps.state_retry.outcome != 'success' && needs.track.outputs.ran == 'true' }}
+        run: |
+          echo "État introuvable : ce passage ne peut pas être enregistré."
+          exit 1
+
+      - name: Vérifier et enregistrer l'état
+        id: save
+        if: ${{ steps.state.outcome == 'success' || steps.state_retry.outcome == 'success' }}
+        env:
+          BRANCH: ${{ github.ref_name }}
+          NEW_STATE: ${{ runner.temp }}/seen-new.json
+        run: |
+          set -euo pipefail
+          # 1. Le fichier reçu doit contenir uniquement des nombres : rien d'autre n'entre dans le dépôt.
+          python3 - <<'EOF'
+          import json, os, sys
+          data = json.load(open("incoming/seen.json", encoding="utf-8"))
+          ok = (
+              isinstance(data, dict)
+              and set(data) == {"initialized", "seen", "attempts", "pending_floor"}
+              and (data["pending_floor"] is None or (type(data["pending_floor"]) is int and data["pending_floor"] > 0))
+              and isinstance(data["initialized"], bool)
+              and isinstance(data["seen"], list)
+              and all(type(x) is int and x > 0 for x in data["seen"])
+              and len(data["seen"]) <= 2000
+              and isinstance(data["attempts"], dict)
+              and all(k.isdigit() and type(v) is int and 0 <= v < 100 for k, v in data["attempts"].items())
+          )
+          if not ok:
+              sys.exit("Fichier d'état refusé : format inattendu.")
+          json.dump(data, open(os.environ["NEW_STATE"], "w", encoding="utf-8"))
+          EOF
+          rm -rf incoming
+          git config user.name "ValentinRLL"
+          git config user.email "9751045+ValentinRLL@users.noreply.github.com"
+          # 2. Fusion avec la dernière version de la branche, puis envoi. Réessai si la branche a bougé.
+          for i in 1 2 3 4 5; do
+            if ! git fetch --quiet origin "$BRANCH"; then
+              sleep $((i * 10))
+              continue
+            fi
+            git reset --quiet --hard "origin/$BRANCH"
+            python3 - <<'EOF'
+          import json, os
+          new = json.load(open(os.environ["NEW_STATE"], encoding="utf-8"))
+          try:
+              base = json.load(open("state/seen.json", encoding="utf-8"))
+              base_seen = [x for x in base.get("seen", []) if type(x) is int]
+              base_init = base.get("initialized") is True
+          except (OSError, ValueError, AttributeError):
+              base_seen, base_init = [], False
+          seen = sorted(set(base_seen) | set(new["seen"]))[-1000:]
+          attempts = {k: v for k, v in sorted(new["attempts"].items()) if int(k) not in set(seen)}
+          os.makedirs("state", exist_ok=True)
+          with open("state/seen.json", "w", encoding="utf-8") as f:
+              json.dump({"initialized": new["initialized"] or base_init, "seen": seen, "attempts": attempts,
+                         "pending_floor": new["pending_floor"]}, f, indent=1)
+              f.write("\n")
+          EOF
+            git add state/seen.json
+            if git diff --cached --quiet; then
+              echo "État inchangé."
+              exit 0
+            fi
+            git commit --quiet -m "Mise à jour de l'état du tracker [skip ci]"
+            if git push --quiet origin "HEAD:$BRANCH"; then
+              exit 0
+            fi
+            sleep $((i * 10))
+          done
+          echo "Impossible d'enregistrer l'état."
+          exit 1
+
+      # Sans état enregistré, chaque passage republierait les mêmes posts et repaierait Claude.
+      # On arrête donc le workflow. Pour le relancer : onglet Actions, puis « Enable workflow ».
+      - name: Désactiver le workflow si l'état n'a pas pu être enregistré
+        # Après 5 essais d'envoi, ou si l'état n'est jamais arrivé alors que le passage a tourné.
+        if: ${{ failure() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "État non enregistré : désactivation du workflow pour éviter les doublons."
+          gh workflow disable tracker.yml --repo "$REPO"
