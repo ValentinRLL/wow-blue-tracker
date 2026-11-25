@@ -5,7 +5,8 @@ name: Blue tracker WoW
 # ne peut jamais lancer ce workflow ni lire ses secrets.
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    # Toutes les 15 minutes, décalé du début de l'heure où GitHub saute souvent des passages.
+    - cron: "7,22,37,52 * * * *"
   workflow_dispatch:
     inputs:
       dry_run:

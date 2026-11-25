@@ -2,7 +2,7 @@
 
 Ce dépôt suit les posts bleus de Blizzard sur **WoW Forever** et les publie en français dans un salon Discord.
 
-Toutes les 15 minutes, GitHub Actions :
+Toutes les 15 minutes (à :07, :22, :37 et :52), GitHub Actions :
 
 1. Lit le [blue tracker des forums US](https://us.forums.blizzard.com/en/wow/groups/blizzard-tracker/posts).
 2. Récupère l'article complet quand le post renvoie vers une news officielle.
