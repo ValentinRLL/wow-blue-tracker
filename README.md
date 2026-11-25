@@ -45,20 +45,32 @@ La fédération d'identité remplace la clé API. À chaque passage, GitHub prou
 1. Ouvre la page [Workload identity](https://platform.claude.com/settings/workload-identity-federation) de la console.
 2. Clique sur **Connect workload**, puis sur la tuile **GitHub Actions**.
 3. Choisis un espace de travail dédié à ce projet, avec un plafond de dépense.
-4. Nomme le compte de service `wow-forever-patchnote`.
+4. Nomme le compte de service `wow-forever-patchnote`, puis ajoute-le comme membre de l'espace dédié. Sans cela, l'accès à Claude est refusé même si la règle correspond.
 5. Remplis la règle de fédération avec ces valeurs :
 
 | Champ du formulaire | Valeur |
 | --- | --- |
 | Nom de la règle | `wow-forever-patchnote` |
 | Organisation GitHub | `ValentinRLL` |
-| Dépôt | `wow-blue-tracker` |
+| Dépôt | `wow-blue-tracker` (la règle vérifie le claim `repository` = `ValentinRLL/wow-blue-tracker`) |
 | Branche / référence | `refs/heads/main` |
 | Événements autorisés | « N'importe quel événement » (« Push uniquement » bloquerait la planification) |
 | Identifiant numérique de l'organisation | `9751045` |
 | Espaces de travail | **Espaces de travail**, puis seulement l'espace dédié au projet |
 | Options avancées : portée OAuth | `workspace:inference` si la console le propose, sinon `workspace:developer` |
 | Options avancées : durée du jeton | `600` secondes |
+
+Un préfixe de `sub` doit contenir les identifiants numériques. Sinon, la règle vérifie le claim `repository`.
+
+GitHub envoie un `sub` qui contient les identifiants numériques du propriétaire et du dépôt :
+
+```
+repo:ValentinRLL@9751045/wow-blue-tracker@1472349302:ref:refs/heads/main
+```
+
+Un préfixe de `sub` sans ces identifiants, comme `repo:ValentinRLL/wow-blue-tracker`, est refusé avec la raison `match_subject_prefix`.
+
+Si un passage est refusé, ouvre l'onglet **Historique** de la page Workload identity. Il montre la raison du refus et les claims reçus, dont `sub` et `repository`.
 
 « N'importe quel événement » reste sûr ici. Une pull request reçoit la référence `refs/pull/...`, jamais `refs/heads/main`. Elle est donc refusée par le champ « Branche / référence ».
 
