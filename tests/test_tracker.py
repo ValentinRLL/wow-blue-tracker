@@ -609,3 +609,9 @@ def test_long_outage_on_old_post_alerts(env, monkeypatch):
     monkeypatch.setattr(main, "_age_hours", lambda iso: 0.5)
     assert main.main() == 0
     assert json.loads(env["state"].read_text())["attempts"] == {}
+
+
+def test_age_hours_accepts_naive_dates():
+    assert main._age_hours("2000-01-01T00:00:00") > 2
+    assert main._age_hours("2000-01-01T00:00:00Z") > 2
+    assert main._age_hours("pas une date") == 0.0

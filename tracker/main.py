@@ -33,6 +33,8 @@ def _age_hours(iso: str) -> float:
         created = datetime.fromisoformat(iso.replace("Z", "+00:00"))
     except ValueError:
         return 0.0
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
     return (datetime.now(timezone.utc) - created).total_seconds() / 3600
 
 
