@@ -2,7 +2,7 @@
 
 Ce dépôt suit les posts bleus de Blizzard sur **WoW Forever** et les publie en français dans un salon Discord.
 
-Toutes les 15 minutes (à :07, :22, :37 et :52), GitHub Actions :
+Toutes les 15 minutes (à :07, :22, :37 et :52 UTC), un minuteur sur le VPS lance le workflow GitHub Actions, qui :
 
 1. Lit le [blue tracker des forums US](https://us.forums.blizzard.com/en/wow/groups/blizzard-tracker/posts).
 2. Récupère l'article complet quand le post renvoie vers une news officielle.
@@ -18,8 +18,9 @@ Au premier passage, les posts déjà en ligne sont marqués comme lus. Rien n'es
 - Aucun secret n'est dans le dépôt. L'URL du webhook est un **secret GitHub Actions**.
 - Aucune clé API n'est stockée : l'accès à Claude passe par la fédération d'identité GitHub, limitée à la branche `main` de ce dépôt.
 - Le script n'affiche jamais ces secrets, même en cas d'erreur.
-- Le workflow ne se lance que par planification, à la main, ou par le passage précédent (relais). Une pull request venant d'un fork ne peut pas le déclencher.
-- Le workflow a trois jobs séparés. Le premier a le secret Discord et l'accès à Claude, mais ne peut pas écrire dans le dépôt. Le second peut écrire mais n'a aucun secret. Le troisième relance le passage suivant : il n'a aucun secret ni accès au code.
+- Le workflow ne se lance que par planification, à la main, ou par le minuteur du VPS. Une pull request venant d'un fork ne peut pas le déclencher.
+- Le VPS n'a qu'un jeton GitHub limité à ce dépôt, avec le seul droit **Actions** (lecture et écriture). Il ne voit ni le code, ni les secrets, et ne peut rien pousser.
+- Le workflow a deux jobs séparés. Le premier a le secret Discord et l'accès à Claude, mais ne peut pas écrire dans le dépôt. Le second peut écrire mais n'a aucun secret.
 - Le second job n'accepte qu'un fichier d'état qui contient uniquement des numéros de posts.
 - Une erreur imprévue n'affiche que son type dans le journal, jamais son contenu.
 - Les dépendances Python sont figées avec leurs empreintes. Les actions GitHub sont figées par commit.
@@ -119,9 +120,43 @@ Option : dans l'onglet **Variables**, crée `TRACKER_SCOPE` pour changer le pér
 3. Lis le journal. Il montre la réécriture des 3 derniers posts, ou « ignoré » s'ils ne concernent pas WoW Forever. Rien n'est publié ni enregistré.
 4. Lance une fois **Run workflow** sans cocher la case. Ce passage marque les posts existants comme lus.
 
-Ensuite, le workflow tourne seul toutes les 15 minutes. La planification de GitHub saute souvent des créneaux, alors chaque passage lance lui-même le suivant au prochain créneau. La planification reste active et relance la chaîne si elle s'arrête.
+Ensuite, le minuteur du VPS lance un passage toutes les 15 minutes (voir plus bas). La planification de GitHub reste active en secours, mais elle saute la plupart des créneaux.
 
-Pour arrêter le tracker : ouvre l'onglet **Actions**, puis **Disable workflow**. Le relais s'arrête aussi.
+Pour arrêter le tracker : ouvre l'onglet **Actions**, puis **Disable workflow**. Les demandes du VPS sont alors refusées par GitHub.
+
+### 6. Minuteur sur le VPS
+
+GitHub saute la plupart des passages planifiés. Un minuteur systemd sur le VPS demande donc chaque passage à GitHub (`workflow_dispatch` sur `main`, `dry_run=false`). Les fichiers sont dans `vps/`.
+
+Le jeton est un jeton GitHub *fine-grained* :
+
+- accès au seul dépôt `wow-blue-tracker` ;
+- permission **Actions** en lecture et écriture, rien d'autre ;
+- expiration à 1 an : il faut le recréer avant la date affichée par GitHub.
+
+Installation (sur le VPS, depuis une copie du dépôt) :
+
+```bash
+sudo install -d -m 755 /usr/local/lib/wow-blue-tracker
+sudo install -m 755 vps/lancer-passage.sh /usr/local/lib/wow-blue-tracker/
+sudo install -m 644 vps/wow-blue-tracker.service vps/wow-blue-tracker.timer /etc/systemd/system/
+sudo install -d -m 700 /etc/wow-blue-tracker
+# Le jeton : fichier de root, en 600, jamais dans le dépôt ni dans un journal.
+sudo sh -c 'umask 077; cat > /etc/wow-blue-tracker/github-token'   # coller le jeton, Entrée, puis Ctrl-D
+sudo systemctl daemon-reload
+sudo systemctl enable --now wow-blue-tracker.timer
+```
+
+Le service tourne sous un utilisateur jetable, sans droits, et reçoit le jeton en lecture seule. Le jeton ne passe jamais en argument d'un processus.
+
+Suivi :
+
+```bash
+systemctl list-timers wow-blue-tracker.timer
+journalctl -u wow-blue-tracker.service -n 20
+```
+
+Pour changer de jeton, réécris `/etc/wow-blue-tracker/github-token` : aucun redémarrage n'est nécessaire.
 
 ## Développement local
 
@@ -149,8 +184,8 @@ pip-compile --generate-hashes --strip-extras -o requirements.txt requirements.in
 
 ## Limites connues
 
-- GitHub saute souvent les passages planifiés. Le relais les remplace. Si un passage échoue avant le relais, la chaîne reprend au prochain passage planifié.
-- Le job de relais attend le créneau suivant, environ 12 minutes par passage. Ce temps est gratuit sur un dépôt public.
+- Si le VPS est coupé, seule la planification de GitHub lance encore le tracker, avec des trous de plusieurs heures.
+- Le minuteur et la planification de GitHub visent les mêmes créneaux. Quand les deux partent, le second passage attend le premier et ne trouve rien de nouveau.
 - Si Blizzard bloque un jour les serveurs de GitHub, le journal affichera « forum injoignable ».
 - Un post réécrit fait 8 000 caractères au plus, soit en général 5 messages Discord, jusqu'à 8 si les paragraphes sont longs. Au-delà, la fin renvoie vers le post original.
 - Un passage traite 8 posts au maximum, en 14 minutes au plus. Les suivants partent au passage d'après.

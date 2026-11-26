@@ -1,0 +1,11 @@
+[Unit]
+Description=Passage du blue tracker WoW toutes les 15 minutes (:07, :22, :37, :52 UTC)
+
+[Timer]
+OnCalendar=*-*-* *:07,22,37,52:00 UTC
+AccuracySec=1s
+# Pas de rattrapage après une coupure : le prochain créneau suffit.
+Persistent=false
+
+[Install]
+WantedBy=timers.target

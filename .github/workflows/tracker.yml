@@ -4,8 +4,10 @@ name: Blue tracker WoW
 # Aucun déclencheur pull_request ou pull_request_target : une PR venant d'un fork
 # ne peut jamais lancer ce workflow ni lire ses secrets.
 on:
+  # Les passages réguliers viennent d'un minuteur sur le VPS (dossier vps/), qui appelle
+  # workflow_dispatch aux mêmes créneaux. Cette planification reste en secours :
+  # GitHub en saute la plupart, mais elle relance le tracker si le VPS s'arrête.
   schedule:
-    # Toutes les 15 minutes, hors du début de l'heure : GitHub y saute souvent des passages.
     - cron: "7,22,37,52 * * * *"
   workflow_dispatch:
     inputs:
@@ -198,56 +200,3 @@ jobs:
         run: |
           echo "État non enregistré : désactivation du workflow pour éviter les doublons."
           gh workflow disable tracker.yml --repo "$REPO"
-
-  # Job 3 : relance le passage suivant. La planification de GitHub saute la plupart des créneaux,
-  # alors chaque passage lance lui-même le suivant au prochain créneau (:07, :22, :37 ou :52).
-  # Aucun secret, aucun accès au code : seulement le droit de lancer ce workflow.
-  # Pour arrêter le relais : désactiver le workflow, ou annuler le passage en cours.
-  relay:
-    needs: [track, save-state]
-    # Seulement sur main, jamais en aperçu, jamais après une annulation ou un échec d'enregistrement.
-    if: ${{ !cancelled() && !inputs.dry_run && github.ref == 'refs/heads/main' && needs.save-state.result != 'failure' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      actions: write
-    steps:
-      - name: Attendre le prochain créneau puis lancer le passage suivant
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          started=$(gh api "repos/$REPO/actions/runs/$RUN_ID" --jq .run_started_at)
-          # Prochain créneau au moins 5 minutes après le début de ce passage, et au moins 30 secondes après maintenant.
-          wait_s=$(STARTED="$started" python3 - <<'PY'
-          import os
-          from datetime import datetime, timedelta, timezone
-          SLOTS = (7, 22, 37, 52)
-          now = datetime.now(timezone.utc)
-          started = datetime.fromisoformat(os.environ["STARTED"].replace("Z", "+00:00"))
-          earliest = max(started + timedelta(minutes=5), now + timedelta(seconds=30))
-          t = earliest.replace(second=0, microsecond=0)
-          while t < earliest or t.minute not in SLOTS:
-              t += timedelta(minutes=1)
-          print(max(30, min(int((t - now).total_seconds()), 16 * 60)))
-          PY
-          )
-          echo "Prochain passage dans ${wait_s} s."
-          sleep "$wait_s"
-          # Un passage déjà en attente (planification de GitHub ou relance manuelle) suffit : pas de double chaîne.
-          waiting=$(gh run list --repo "$REPO" --workflow tracker.yml --limit 20 --json status \
-            --jq '[.[] | select(.status == "queued" or .status == "pending" or .status == "waiting" or .status == "requested")] | length')
-          if [ "$waiting" -gt 0 ]; then
-            echo "Un passage est déjà en attente : pas de relance."
-            exit 0
-          fi
-          # Workflow désactivé pendant l'attente : on s'arrête sans erreur.
-          state=$(gh api "repos/$REPO/actions/workflows/tracker.yml" --jq .state)
-          if [ "$state" != "active" ]; then
-            echo "Workflow désactivé : pas de relance."
-            exit 0
-          fi
-          gh workflow run tracker.yml --repo "$REPO" --ref main -f dry_run=false
-          echo "Passage suivant lancé."
