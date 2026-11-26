@@ -53,7 +53,7 @@ En cas de doute sur un post qui apporte une information concrète et utile, gard
 - Reste fidèle : n'invente rien, ne retire aucune information importante. Tu peux regrouper et reformuler.
 - Pour un correctif ou un changement d'équilibrage, garde chaque changement.
 - Pas de lien, pas de mention (@), pas de signature : le lien vers la source est ajouté automatiquement.
-- Longueur du corps : 3 500 caractères au maximum. Si le post est très long, résume les points mineurs.
+- Longueur du corps : 7 500 caractères au maximum. Garde tout le contenu. Ne résume les points mineurs que si le post dépasse cette longueur.
 - « tag » : 1 à 3 mots qui situent le post (ex. « WoW Forever », « Midnight », « Boutique »).
 """
 

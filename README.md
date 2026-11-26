@@ -149,6 +149,7 @@ pip-compile --generate-hashes --strip-extras -o requirements.txt requirements.in
 
 - GitHub peut retarder les tâches planifiées de quelques minutes quand ses serveurs sont chargés.
 - Si Blizzard bloque un jour les serveurs de GitHub, le journal affichera « forum injoignable ».
+- Un post réécrit fait 8 000 caractères au plus, soit en général 5 messages Discord, jusqu'à 8 si les paragraphes sont longs. Au-delà, la fin renvoie vers le post original.
 - Un passage traite 8 posts au maximum, en 14 minutes au plus. Les suivants partent au passage d'après.
 - Si l'état ne peut pas être enregistré, le workflow se désactive pour éviter les doublons. Réactive-le dans l'onglet **Actions** avec **Enable workflow**.
 - Si Discord coupe la connexion pendant un envoi, le post n'est pas renvoyé, pour éviter un doublon. Il peut alors manquer dans le salon.

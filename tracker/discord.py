@@ -16,7 +16,7 @@ from .rewriter import Rewrite
 from .sources import USER_AGENT, BluePost
 
 DISCORD_LIMIT = 2000
-MAX_BODY_CHARS = 4000  # au plus 3 messages Discord par post
+MAX_BODY_CHARS = 8000  # en général 5 messages Discord, jusqu'à 8 si les paragraphes sont longs
 PARIS = ZoneInfo("Europe/Paris")
 WEBHOOK_RE = re.compile(r"^https://(?:canary\.|ptb\.)?discord(?:app)?\.com/api/webhooks/[0-9]+/[A-Za-z0-9_-]+$")
 

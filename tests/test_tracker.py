@@ -535,7 +535,15 @@ def test_body_is_capped():
     rw = Rewrite(True, "", "t", "T", "\n".join(["- ligne " + "x" * 90] * 200))
     msg = discord.format_message(make_post(), rw)
     assert len(msg) < discord.MAX_BODY_CHARS + 400
-    assert len(discord.split_message(msg)) <= 3
+    assert len(discord.split_message(msg)) <= 5
+
+
+def test_long_body_is_kept_whole():
+    body = "\n".join(f"- correctif {i} " + "x" * 60 for i in range(100))
+    assert 7000 < len(body) < discord.MAX_BODY_CHARS
+    msg = discord.format_message(make_post(), Rewrite(True, "", "t", "T", body))
+    assert body in msg
+    assert "la suite est dans le post original" not in msg
 
 
 def test_date_is_paris_time():
