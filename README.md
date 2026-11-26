@@ -142,7 +142,7 @@ sudo install -m 755 vps/lancer-passage.sh /usr/local/lib/wow-blue-tracker/
 sudo install -m 644 vps/wow-blue-tracker.service vps/wow-blue-tracker.timer /etc/systemd/system/
 sudo install -d -m 700 /etc/wow-blue-tracker
 # Le jeton : fichier de root, en 600, jamais dans le dépôt ni dans un journal.
-sudo sh -c 'umask 077; cat > /etc/wow-blue-tracker/github-token'   # coller le jeton, Entrée, puis Ctrl-D
+stty -echo; sudo sh -c 'umask 077; cat > /etc/wow-blue-tracker/github-token'; stty echo   # coller le jeton (invisible), Entrée, puis Ctrl-D
 sudo systemctl daemon-reload
 sudo systemctl enable --now wow-blue-tracker.timer
 ```

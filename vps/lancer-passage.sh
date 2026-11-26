@@ -21,6 +21,7 @@ status=$(printf 'header = "Authorization: Bearer %s"\n' "$token" | curl --config
   --silent --show-error --max-time 30 --proto '=https' \
   --request POST \
   --header "Accept: application/vnd.github+json" \
+  --header "Content-Type: application/json" \
   --header "X-GitHub-Api-Version: 2022-11-28" \
   --header "User-Agent: wow-blue-tracker-vps" \
   --data '{"ref":"main","inputs":{"dry_run":"false"}}' \
