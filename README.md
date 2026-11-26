@@ -18,8 +18,8 @@ Au premier passage, les posts déjà en ligne sont marqués comme lus. Rien n'es
 - Aucun secret n'est dans le dépôt. L'URL du webhook est un **secret GitHub Actions**.
 - Aucune clé API n'est stockée : l'accès à Claude passe par la fédération d'identité GitHub, limitée à la branche `main` de ce dépôt.
 - Le script n'affiche jamais ces secrets, même en cas d'erreur.
-- Le workflow ne se lance que par planification ou à la main. Une pull request venant d'un fork ne peut pas le déclencher.
-- Le workflow a deux jobs séparés. Le premier a le secret Discord et l'accès à Claude, mais ne peut pas écrire dans le dépôt. Le second peut écrire mais n'a aucun secret.
+- Le workflow ne se lance que par planification, à la main, ou par le passage précédent (relais). Une pull request venant d'un fork ne peut pas le déclencher.
+- Le workflow a trois jobs séparés. Le premier a le secret Discord et l'accès à Claude, mais ne peut pas écrire dans le dépôt. Le second peut écrire mais n'a aucun secret. Le troisième relance le passage suivant : il n'a aucun secret ni accès au code.
 - Le second job n'accepte qu'un fichier d'état qui contient uniquement des numéros de posts.
 - Une erreur imprévue n'affiche que son type dans le journal, jamais son contenu.
 - Les dépendances Python sont figées avec leurs empreintes. Les actions GitHub sont figées par commit.
@@ -119,7 +119,9 @@ Option : dans l'onglet **Variables**, crée `TRACKER_SCOPE` pour changer le pér
 3. Lis le journal. Il montre la réécriture des 3 derniers posts, ou « ignoré » s'ils ne concernent pas WoW Forever. Rien n'est publié ni enregistré.
 4. Lance une fois **Run workflow** sans cocher la case. Ce passage marque les posts existants comme lus.
 
-Ensuite, le workflow tourne seul toutes les 15 minutes.
+Ensuite, le workflow tourne seul toutes les 15 minutes. La planification de GitHub saute souvent des créneaux, alors chaque passage lance lui-même le suivant au prochain créneau. La planification reste active et relance la chaîne si elle s'arrête.
+
+Pour arrêter le tracker : ouvre l'onglet **Actions**, puis **Disable workflow**. Le relais s'arrête aussi.
 
 ## Développement local
 
@@ -147,7 +149,8 @@ pip-compile --generate-hashes --strip-extras -o requirements.txt requirements.in
 
 ## Limites connues
 
-- GitHub peut retarder les tâches planifiées de quelques minutes quand ses serveurs sont chargés.
+- GitHub saute souvent les passages planifiés. Le relais les remplace. Si un passage échoue avant le relais, la chaîne reprend au prochain passage planifié.
+- Le job de relais attend le créneau suivant, environ 12 minutes par passage. Ce temps est gratuit sur un dépôt public.
 - Si Blizzard bloque un jour les serveurs de GitHub, le journal affichera « forum injoignable ».
 - Un post réécrit fait 8 000 caractères au plus, soit en général 5 messages Discord, jusqu'à 8 si les paragraphes sont longs. Au-delà, la fin renvoie vers le post original.
 - Un passage traite 8 posts au maximum, en 14 minutes au plus. Les suivants partent au passage d'après.
