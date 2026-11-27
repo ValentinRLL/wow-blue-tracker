@@ -2,7 +2,7 @@
 
 Ce dépôt suit les posts bleus de Blizzard sur **WoW Forever** et les publie en français dans un salon Discord.
 
-Toutes les 15 minutes (à :07, :22, :37 et :52 UTC), un minuteur sur le VPS lance le workflow GitHub Actions, qui :
+Toutes les heures (à :07 UTC), un minuteur sur le VPS lance le workflow GitHub Actions, qui :
 
 1. Lit le [blue tracker des forums US](https://us.forums.blizzard.com/en/wow/groups/blizzard-tracker/posts).
 2. Récupère l'article complet quand le post renvoie vers une news officielle.
@@ -120,7 +120,7 @@ Option : dans l'onglet **Variables**, crée `TRACKER_SCOPE` pour changer le pér
 3. Lis le journal. Il montre la réécriture des 3 derniers posts, ou « ignoré » s'ils ne concernent pas WoW Forever. Rien n'est publié ni enregistré.
 4. Lance une fois **Run workflow** sans cocher la case. Ce passage marque les posts existants comme lus.
 
-Ensuite, le minuteur du VPS lance un passage toutes les 15 minutes (voir plus bas). La planification de GitHub reste active en secours, mais elle saute la plupart des créneaux.
+Ensuite, le minuteur du VPS lance un passage toutes les heures (voir plus bas). La planification de GitHub reste active en secours, mais elle saute la plupart des créneaux.
 
 Pour arrêter le tracker : ouvre l'onglet **Actions**, puis **Disable workflow**. Les demandes du VPS sont alors refusées par GitHub.
 

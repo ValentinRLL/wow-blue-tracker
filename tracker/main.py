@@ -1,4 +1,4 @@
-"""Point d'entrée : un passage du tracker (lancé toutes les 15 minutes par GitHub Actions)."""
+"""Point d'entrée : un passage du tracker (lancé toutes les heures par GitHub Actions)."""
 
 from __future__ import annotations
 

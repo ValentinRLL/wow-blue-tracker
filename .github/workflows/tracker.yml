@@ -8,7 +8,7 @@ on:
   # workflow_dispatch aux mêmes créneaux. Cette planification reste en secours :
   # GitHub en saute la plupart, mais elle relance le tracker si le VPS s'arrête.
   schedule:
-    - cron: "7,22,37,52 * * * *"
+    - cron: "7 * * * *"
   workflow_dispatch:
     inputs:
       dry_run:
